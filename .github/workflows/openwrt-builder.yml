@@ -2,15 +2,9 @@ name: Build ImmortalWrt for C2000-MAX
 
 on:
   workflow_dispatch:
-    inputs:
-      configFile:
-        description: '配置文件路径'
-        required: false
-        default: 'config/c2000max.config'
 
 env:
-  REPO_BRANCH: v23.05.4
-  CONFIG_FILE: ${{ github.event.inputs.configFile || 'config/c2000max.config' }}
+  REPO_BRANCH: openwrt-24.10
   TZ: Asia/Shanghai
 
 jobs:
@@ -29,23 +23,47 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential libncurses-dev gawk flex bison git python3 python3-pip unzip libssl-dev libelf-dev
 
-      - name: 更新 feeds
+      - name: 更新 feeds（换国内源）
         run: |
+          sed -i 's/https:\/\/git.openwrt.org\/feed/https:\/\/github.com\/openwrt/g' feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 加载自定义配置
+      - name: 直接写入配置，不依赖外部文件
         run: |
-          cat ${{ env.CONFIG_FILE }} >> .config
+          cat << 'EOF' >> .config
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_mediatek_filogic_DEVICE_nradio_c2000-max=y
+
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+
+          CONFIG_PACKAGE_dnsmasq-full=y
+          CONFIG_PACKAGE_iptables-mod-tproxy=y
+          CONFIG_PACKAGE_kmod-tun=y
+          CONFIG_PACKAGE_kmod-ipt-nathelper=y
+          CONFIG_PACKAGE_ipset=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_ca-bundle=y
+
+          CONFIG_PACKAGE_luci-app-passwall=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Hysteria2=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray=y
+          CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray=y
+
+          CONFIG_PACKAGE_luci-app-mihomo=y
+          EOF
           make defconfig
 
       - name: 下载依赖包
         run: |
-          make -j$(nproc) download
+          make -j$(nproc) download || true
 
       - name: 编译固件
         run: |
-          make -j$(nproc)
+          make -j$(nproc) V=s
 
       - name: 上传固件到 Artifacts
         uses: actions/upload-artifact@v4
